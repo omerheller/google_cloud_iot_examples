@@ -14,8 +14,11 @@ import time
 
 import jwt
 import paho.mqtt.client as mqtt
+from mqtt_config_subscriber import getConfig
+from sense_hat import SenseHat
 
-project_id = 'awesome-project-31'  # Enter your project ID here
+
+project_id = 'iot-weather-project'  # Enter your project ID here
 registry_id = 'my-registry'  # Enter your Registry ID here
 device_id = 'my-device'  # Enter your Device ID here
 ca_certs = 'roots.pem'  # The location of the Google Internet Authority certificate, can be downloaded from https://pki.google.com/roots.pem
@@ -29,6 +32,7 @@ mqtt_bridge_port = 443  # port 8883 is blocked in BGU network
 mqtt_topic = '/devices/{}/{}'.format(device_id, 'events')  # Published messages go to the 'events' topic that is bridged to pubsub by Google
 ###
 
+sendData = True
 
 def create_jwt():
     """Creates a JWT (https://jwt.io) to establish an MQTT connection.
@@ -71,7 +75,7 @@ def error_str(rc):
 
 def on_connect(unused_client, unused_userdata, unused_flags, rc):
     """Callback for when a device connects."""
-    print('on_connect', mqtt.connack_string(rc))
+    print('publisher: on_connect', mqtt.connack_string(rc))
 
 
 def on_disconnect(unused_client, unused_userdata, rc):
@@ -83,6 +87,18 @@ def on_publish(unused_client, unused_userdata, unused_mid):
     """Paho callback when a message is sent to the broker."""
     print('on_publish')
 
+def acquireData():
+    sense = SenseHat()
+    sense.show_message("Collecting Data")
+    sense.clear()
+    date = datetime.datetime.now()
+    date = date.strftime('%Y-%m-%d %H:%M:%S.%f')
+    temp = sense.get_temperature()
+    humidity = sense.get_humidity()
+    pressure = sense.get_pressure()
+
+    return [date, temp, humidity, pressure]
+
 
 # Create our MQTT client. The client_id is a unique string that identifies
 # this device. For Google Cloud IoT Core, it must be in the format below.
@@ -93,42 +109,57 @@ client = mqtt.Client(
         registry_id,
         device_id)))
 
-# With Google Cloud IoT Core, the username field is ignored, and the
-# password field is used to transmit a JWT to authorize the device.
-client.username_pw_set(
-    username='unused',
-    password=create_jwt())
+def main1():
+    # With Google Cloud IoT Core, the username field is ignored, and the
+    # password field is used to transmit a JWT to authorize the device.
+    print("Initial configVar:", getConfig())
 
-# Enable SSL/TLS support.
-client.tls_set(ca_certs=ca_certs)
+    client.username_pw_set(
+        username='unused',
+        password=create_jwt())
 
-# Register message callbacks. https://eclipse.org/paho/clients/python/docs/
-# describes additional callbacks that Paho supports. In this example, the
-# callbacks just print to standard out.
-client.on_connect = on_connect
-client.on_publish = on_publish
-client.on_disconnect = on_disconnect
+    # Enable SSL/TLS support.
+    client.tls_set(ca_certs=ca_certs)
 
-# Connect to the Google MQTT bridge.
-client.connect(mqtt_bridge_hostname, mqtt_bridge_port)
+    # Register message callbacks. https://eclipse.org/paho/clients/python/docs/
+    # describes additional callbacks that Paho supports. In this example, the
+    # callbacks just print to standard out.
+    client.on_connect = on_connect
+    client.on_publish = on_publish
+    client.on_disconnect = on_disconnect
 
-# Start the network loop.
-client.loop_start()
+    # Connect to the Google MQTT bridge.
+    client.connect(mqtt_bridge_hostname, mqtt_bridge_port)
 
-# Publish num_messages mesages to the MQTT bridge once per second.
-for i in range(3):
-    payload = 'Message {} Time {}'.format(
-        i, str(datetime.datetime.now()))
-    print('Publishing Message {}'.format(i))
+    # Start the network loop.
+    client.loop_start()
+    nextSendTime = datetime.datetime.now()
+    # Publish num_messages mesages to the MQTT bridge once per second.
+    while True:
+    	print("configVar : ", getConfig())
+    	print("nextSendTime : ", nextSendTime)
+    	print("now : ", datetime.datetime.now())
+        if datetime.datetime.now() >= nextSendTime:
+            sendData = True
 
-    # Publish "payload" to the MQTT topic. qos=1 means at least once
-    # delivery. Cloud IoT Core also supports qos=0 for at most once
-    # delivery.
-    client.publish(mqtt_topic, payload, qos=1)
+        if sendData:
+            payload = str(acquireData())
+            sendData = False
+            now = datetime.datetime.now()
+            nextSendTime = now + datetime.timedelta(minutes = getConfig())
+        else:
+            payload = 'PING'
+        
+        print('Publishing Message')
 
-    # Send events every second
-    time.sleep(1)
+        # Publish "payload" to the MQTT topic. qos=1 means at least once
+        # delivery. Cloud IoT Core also supports qos=0 for at most once
+        # delivery.
+        client.publish(mqtt_topic, payload, qos=1)
 
-# End the network loop and finish.
-client.loop_stop()
-print('Finished.')
+        # Send events every second
+        time.sleep(3)
+
+    # End the network loop and finish.
+    client.loop_stop()
+    print('Finished.')
