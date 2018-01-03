@@ -41,6 +41,11 @@ def on_message(message):
     """Called when a message is received"""
     if message.data != 'PING':
     	data = ast.literal_eval(message.data)
+	#
+	#
+	# ADD A ROW TO THE DATABASE
+	#
+	#
     	tweet_text = "Time: %s\nTemperature: %s\nHumidity: %s\nPressure: %s\n" % (data[0], str(data[1]), str(data[2]), str(data[3]))
         if len(tweet_text) <= 280:
             api.update_status(status=tweet_text)
