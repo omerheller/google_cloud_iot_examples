@@ -11,11 +11,15 @@
 ############################################################
 
 import datetime
+import time
 
 import jwt
 import paho.mqtt.client as mqtt
+from sense_hat import SenseHat
 
-project_id = 'awesome-project-31'  # Enter your project ID here
+configVar = ['1', 'False']
+
+project_id = 'iot-weather-project'  # Enter your project ID here
 registry_id = 'my-registry'  # Enter your Registry ID here
 device_id = 'my-device'  # Enter your Device ID here
 ca_certs = 'roots.pem'  # The location of the Google Internet Authority certificate, can be downloaded from https://pki.google.com/roots.pem
@@ -71,18 +75,36 @@ def error_str(rc):
 
 def on_connect(client, unused_userdata, unused_flags, rc):
     """Callback for when a device connects."""
-    print('on_connect', mqtt.connack_string(rc))
+    print('config_subscriber: on_connect', mqtt.connack_string(rc))
     # Subscribe to the topic of interest once connected
     client.subscribe(mqtt_topic, 0)
 
+def sensorAlert():
+    sense = SenseHat()
+    red = (255, 0, 0)
+
+    for i in range(3):
+        sense.clear()
+        time.sleep(1)
+        sense.clear(red)
+        time.sleep(1)
+
+    sense.clear()
 
 def on_message(unused_client, unused_userdata, msg):
     """Callback for when a message is received."""
-    print ("Received", msg.topic, msg.qos, msg.payload)
     #
     # CHECK SIGNATURE OF MESSAGE
     #
+    global configVar
+    configVar = msg.payload.split()
+    if(configVar[1] == 'True'):
+        sensorAlert()
+    print("configVar has changed to:", configVar)
+    #print ("Received", msg.topic, msg.qos, msg.payload)
 
+def getConfig():
+    return int(configVar[0])
 
 def on_subscribe(unused_client, unused_userdata, mid, qos):
     print("Subscribed to Topic", mqtt_topic, qos)
@@ -96,25 +118,26 @@ client = mqtt.Client(
         registry_id,
         device_id)))
 
-# With Google Cloud IoT Core, the username field is ignored, and the
-# password field is used to transmit a JWT to authorize the device.
-client.username_pw_set(
-    username='unused',
-    password=create_jwt()
-)
+def main2():
+    # With Google Cloud IoT Core, the username field is ignored, and the
+    # password field is used to transmit a JWT to authorize the device.
+    client.username_pw_set(
+        username='unused',
+        password=create_jwt()
+    )
 
-# Enable SSL/TLS support.
-client.tls_set(ca_certs=ca_certs)
+    # Enable SSL/TLS support.
+    client.tls_set(ca_certs=ca_certs)
 
-# Register message callbacks. https://eclipse.org/paho/clients/python/docs/
-# describes additional callbacks that Paho supports. In this example, the
-# callbacks just print to standard out.
-client.on_connect = on_connect
-client.on_subscribe = on_subscribe
-client.on_message = on_message
+    # Register message callbacks. https://eclipse.org/paho/clients/python/docs/
+    # describes additional callbacks that Paho supports. In this example, the
+    # callbacks just print to standard out.
+    client.on_connect = on_connect
+    client.on_subscribe = on_subscribe
+    client.on_message = on_message
 
-# Connect to the Google MQTT bridge.
-client.connect(mqtt_bridge_hostname, mqtt_bridge_port)
+    # Connect to the Google MQTT bridge.
+    client.connect(mqtt_bridge_hostname, mqtt_bridge_port)
 
-# Start the network loop.
-client.loop_forever()
+    # Start the network loop.
+    client.loop_forever()
