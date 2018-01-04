@@ -79,6 +79,9 @@ def on_connect(client, unused_userdata, unused_flags, rc):
 def on_message(unused_client, unused_userdata, msg):
     """Callback for when a message is received."""
     print ("Received", msg.topic, msg.qos, msg.payload)
+    #
+    # CHECK SIGNATURE OF MESSAGE
+    #
 
 
 def on_subscribe(unused_client, unused_userdata, mid, qos):
